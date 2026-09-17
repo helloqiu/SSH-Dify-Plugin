@@ -1,7 +1,7 @@
 # SSH Command Execution Plugin
 
 **Author:** [Steven Lynn](https://github.com/stvlynn)
-**Version:** 0.0.3
+**Version:** 0.0.4
 **Type:** tool
 
 ## Description
