@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 import paramiko
 import io
 import socket
+import threading
 import traceback
 
 from dify_plugin import Tool
@@ -69,6 +70,29 @@ def _load_private_key(private_key: str, passphrase: Optional[str], key_type: Opt
     ) from last_key_error
 
 
+def _read_streams(stdout, stderr) -> tuple[bytes, bytes]:
+    """并发读取 stdout 与 stderr。
+
+    串行读取（先读完 stdout 再读 stderr）时，若对端把超过 channel window 的数据写进
+    stderr，窗口写满后会阻塞对端，stdout 永远拿不到 EOF，导致命令卡死。
+    """
+    buffers: dict[str, bytes] = {}
+
+    def reader(name: str, stream) -> None:
+        buffers[name] = stream.read()
+
+    threads = [
+        threading.Thread(target=reader, args=("stdout", stdout)),
+        threading.Thread(target=reader, args=("stderr", stderr)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    return buffers.get("stdout", b""), buffers.get("stderr", b"")
+
+
 class SshTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         host = tool_parameters.get('host')
@@ -132,8 +156,7 @@ class SshTool(Tool):
 
             stdin, stdout, stderr = client.exec_command(env_cmd)
             
-            stdout_bytes = stdout.read()
-            stderr_bytes = stderr.read()
+            stdout_bytes, stderr_bytes = _read_streams(stdout, stderr)
             exit_status = stdout.channel.recv_exit_status()
 
             stdout_str = stdout_bytes.decode('utf-8', errors='replace')

@@ -1,7 +1,7 @@
 # SSH Command Execution Plugin
 
 **Author:** [Steven Lynn](https://github.com/stvlynn)
-**Version:** 0.0.2
+**Version:** 0.0.3
 **Type:** tool
 
 ## Description
@@ -15,6 +15,7 @@ The SSH Command Execution Plugin allows users to execute commands on remote serv
 
 - Supports password and private key authentication
 - Supports specifying the private key type (`auto`, `rsa`, `ed25519`, `ecdsa`, `dsa`), with auto-detection as the default
+- Accepts multi-line scripts and `&&` / `;` command chains
 - Executes remote commands and returns standard output and standard error
 - Securely handles connection and authentication errors
 
@@ -40,6 +41,18 @@ When `auth_type` is `key`, `key_type` controls how the private key is parsed:
 - `rsa` / `ed25519` / `ecdsa` / `dsa`: parses the key with the exact type you choose and returns a specific error when the key does not match, which makes troubleshooting a bad or mismatched key much easier.
 
 `dsa` keys are only supported by paramiko releases that still ship DSS/DSA support.
+
+### Multi-line Commands
+
+`command` accepts a whole script, not just a single line. Real newlines, `&&` / `;` chains, pipelines, `for` / `if` blocks and heredocs are all handed to the remote shell as one script, and it runs in the login shell (so `cd` on one line affects the following lines). `exit_status` is the exit status of the whole script.
+
+```python
+"command": "cd /srv/app && git pull"          # chain
+"command": "echo '1' && echo '2'"             # chain
+"command": "echo '1'\necho '2'"               # real newline
+```
+
+Note that the command must contain **real newlines**. A literal `\n` (backslash + n) is passed to the shell as-is and is not converted into a line break — that is intentional, since `printf 'a\nb'` and `sed 's/a\nb/'` rely on the literal sequence.
 
 ## Safety Tip
 
