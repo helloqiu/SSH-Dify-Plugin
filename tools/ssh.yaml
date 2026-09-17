@@ -115,6 +115,46 @@ parameters:
       pt_BR: A frase-senha para a chave privada (se a chave estiver criptografada)
     llm_description: The passphrase for the private key if it is encrypted. Optional.
     form: llm
+  - name: key_type
+    type: select
+    required: false
+    default: auto
+    form: form
+    options:
+      - value: auto
+        label:
+          en_US: Auto Detect
+          zh_Hans: 自动识别
+          pt_BR: Detecção automática
+      - value: rsa
+        label:
+          en_US: RSA
+          zh_Hans: RSA
+          pt_BR: RSA
+      - value: ed25519
+        label:
+          en_US: Ed25519
+          zh_Hans: Ed25519
+          pt_BR: Ed25519
+      - value: ecdsa
+        label:
+          en_US: ECDSA
+          zh_Hans: ECDSA
+          pt_BR: ECDSA
+      - value: dsa
+        label:
+          en_US: DSA
+          zh_Hans: DSA
+          pt_BR: DSA
+    label:
+      en_US: Private Key Type
+      zh_Hans: 私钥类型
+      pt_BR: Tipo de chave privada
+    human_description:
+      en_US: The type of the private key, used only when auth_type is key. Use Auto Detect if unsure
+      zh_Hans: 私钥的密钥类型，仅在认证类型为私钥时生效。不确定时请使用自动识别
+      pt_BR: O tipo da chave privada, usado apenas quando auth_type for chave. Use Detecção automática se não tiver certeza
+    llm_description: The type of the private key (auto, rsa, ed25519, ecdsa or dsa). Only used when auth_type is key. Defaults to auto.
   - name: command
     type: string
     required: true

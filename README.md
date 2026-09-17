@@ -1,7 +1,7 @@
 # SSH Command Execution Plugin
 
 **Author:** [Steven Lynn](https://github.com/stvlynn)
-**Version:** 0.0.1
+**Version:** 0.0.2
 **Type:** tool
 
 ## Description
@@ -14,6 +14,7 @@ The SSH Command Execution Plugin allows users to execute commands on remote serv
 ## Features
 
 - Supports password and private key authentication
+- Supports specifying the private key type (`auto`, `rsa`, `ed25519`, `ecdsa`, `dsa`), with auto-detection as the default
 - Executes remote commands and returns standard output and standard error
 - Securely handles connection and authentication errors
 
@@ -28,7 +29,17 @@ The SSH Command Execution Plugin allows users to execute commands on remote serv
 | password | string | Conditional | Password for password authentication (required if auth_type is password) |
 | private_key | string | Conditional | Private key content for key authentication (required if auth_type is key) |
 | passphrase | string | No | Passphrase for the private key (if the key is encrypted) |
+| key_type | select | No | Private key type: `auto` (default), `rsa`, `ed25519`, `ecdsa` or `dsa`. Only used when auth_type is key |
 | command | string | Yes | Command to execute on the remote server |
+
+### About Private Key Type
+
+When `auth_type` is `key`, `key_type` controls how the private key is parsed:
+
+- `auto` (default): tries Ed25519, ECDSA, RSA and DSA in turn. Works in most cases, but a mismatched key type produces a generic error.
+- `rsa` / `ed25519` / `ecdsa` / `dsa`: parses the key with the exact type you choose and returns a specific error when the key does not match, which makes troubleshooting a bad or mismatched key much easier.
+
+`dsa` keys are only supported by paramiko releases that still ship DSS/DSA support.
 
 ## Safety Tip
 
@@ -43,6 +54,7 @@ Keep your instance IP and password safe in **Environment Varriable -> secret**!
 {
   "private_key": "",
   "passphrase": "",
+  "key_type": "auto",
   "host": "192.************1",
   "port": "22",
   "username": "root",

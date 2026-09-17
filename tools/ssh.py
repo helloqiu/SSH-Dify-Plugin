@@ -8,6 +8,67 @@ import traceback
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
+# 私钥类型 -> paramiko 中对应的解析类名（按尝试顺序排列）
+KEY_TYPE_CLASS_NAMES: dict[str, tuple[str, ...]] = {
+    "rsa": ("RSAKey",),
+    "ed25519": ("Ed25519Key",),
+    # paramiko 2.x 使用 DSSKey，3.x 中为 DSAKey（DSSKey 为其别名）
+    "dsa": ("DSAKey", "DSSKey"),
+    "ecdsa": ("ECDSAKey",),
+}
+
+# key_type 为 auto 时按此顺序自动尝试
+AUTO_KEY_CLASS_NAMES: tuple[str, ...] = ("Ed25519Key", "ECDSAKey", "RSAKey", "DSAKey", "DSSKey")
+
+
+def _load_private_key(private_key: str, passphrase: Optional[str], key_type: Optional[str]):
+    """按指定类型（或自动探测）解析私钥内容，返回 paramiko PKey 对象。"""
+    normalized = (key_type or "auto").strip().lower()
+
+    if normalized == "auto":
+        class_names = AUTO_KEY_CLASS_NAMES
+    elif normalized in KEY_TYPE_CLASS_NAMES:
+        class_names = KEY_TYPE_CLASS_NAMES[normalized]
+    else:
+        supported = ", ".join(["auto", *KEY_TYPE_CLASS_NAMES])
+        raise paramiko.SSHException(
+            f"Unsupported private key type: {key_type}. Supported values: {supported}."
+        )
+
+    key_classes: list[type] = []
+    for key_cls_name in class_names:
+        key_cls = getattr(paramiko, key_cls_name, None)
+        if key_cls is not None and key_cls not in key_classes:
+            key_classes.append(key_cls)
+
+    if not key_classes:
+        raise paramiko.SSHException(
+            f"Installed paramiko does not support private key type: {normalized}"
+        )
+
+    password_arg = passphrase if passphrase else None
+    key_file = io.StringIO(private_key)
+    last_key_error: Exception | None = None
+
+    for key_cls in key_classes:
+        key_file.seek(0)
+        try:
+            return key_cls.from_private_key(key_file, password=password_arg)
+        except paramiko.PasswordRequiredException as e:
+            raise paramiko.SSHException("Passphrase is required for encrypted private key") from e
+        except Exception as e:
+            last_key_error = e
+            continue
+
+    if normalized == "auto":
+        raise paramiko.SSHException(
+            f"Unsupported or invalid private key: {str(last_key_error)}"
+        ) from last_key_error
+    raise paramiko.SSHException(
+        f"Failed to parse private key as {normalized}: {str(last_key_error)}"
+    ) from last_key_error
+
+
 class SshTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         host = tool_parameters.get('host')
@@ -17,6 +78,7 @@ class SshTool(Tool):
         password = tool_parameters.get('password')
         private_key = tool_parameters.get('private_key')
         passphrase = tool_parameters.get('passphrase')
+        key_type = tool_parameters.get('key_type')
         command = tool_parameters.get('command')
         
         if not host or not username or not command:
@@ -49,34 +111,8 @@ class SshTool(Tool):
                     timeout=10
                 )
             else:  # key authentication
-                key_file = io.StringIO(private_key)
-                password_arg = passphrase if passphrase else None
-                pkey = None
-                last_key_error: Exception | None = None
+                pkey = _load_private_key(private_key, passphrase, key_type)
 
-                key_classes: list[type] = []
-                for key_cls_name in ("Ed25519Key", "ECDSAKey", "RSAKey", "DSSKey", "DSAKey"):
-                    key_cls = getattr(paramiko, key_cls_name, None)
-                    if key_cls is not None and key_cls not in key_classes:
-                        key_classes.append(key_cls)
-
-                for key_cls in key_classes:
-                    key_file.seek(0)
-                    try:
-                        pkey = key_cls.from_private_key(key_file, password=password_arg)
-                        break
-                    except paramiko.PasswordRequiredException as e:
-                        last_key_error = e
-                        raise paramiko.SSHException("Passphrase is required for encrypted private key") from e
-                    except Exception as e:
-                        last_key_error = e
-                        continue
-
-                if pkey is None:
-                    if last_key_error is not None:
-                        raise paramiko.SSHException(f"Unsupported or invalid private key: {str(last_key_error)}") from last_key_error
-                    raise paramiko.SSHException("Unsupported or invalid private key type")
-                
                 client.connect(
                     hostname=host,
                     port=port,

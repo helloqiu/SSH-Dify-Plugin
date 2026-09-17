@@ -484,6 +484,64 @@ workflow:
           template: null
           type: string
         - auto_generate: null
+          default: auto
+          form: form
+          human_description:
+            en_US: The type of the private key, used only when auth_type is key. Use
+              Auto Detect if unsure
+            ja_JP: The type of the private key, used only when auth_type is key. Use
+              Auto Detect if unsure
+            pt_BR: O tipo da chave privada, usado apenas quando auth_type for chave.
+              Use Detecção automática se não tiver certeza
+            zh_Hans: 私钥的密钥类型，仅在认证类型为私钥时生效。不确定时请使用自动识别
+          label:
+            en_US: Private Key Type
+            ja_JP: Private Key Type
+            pt_BR: Tipo de chave privada
+            zh_Hans: 私钥类型
+          llm_description: The type of the private key (auto, rsa, ed25519, ecdsa or
+            dsa). Only used when auth_type is key. Defaults to auto.
+          max: null
+          min: null
+          name: key_type
+          options:
+          - label:
+              en_US: Auto Detect
+              ja_JP: Auto Detect
+              pt_BR: Detecção automática
+              zh_Hans: 自动识别
+            value: auto
+          - label:
+              en_US: RSA
+              ja_JP: RSA
+              pt_BR: RSA
+              zh_Hans: RSA
+            value: rsa
+          - label:
+              en_US: Ed25519
+              ja_JP: Ed25519
+              pt_BR: Ed25519
+              zh_Hans: Ed25519
+            value: ed25519
+          - label:
+              en_US: ECDSA
+              ja_JP: ECDSA
+              pt_BR: ECDSA
+              zh_Hans: ECDSA
+            value: ecdsa
+          - label:
+              en_US: DSA
+              ja_JP: DSA
+              pt_BR: DSA
+              zh_Hans: DSA
+            value: dsa
+          placeholder: null
+          precision: null
+          required: false
+          scope: null
+          template: null
+          type: select
+        - auto_generate: null
           default: null
           form: llm
           human_description:
@@ -511,6 +569,7 @@ workflow:
           auth_type: ''
           command: ''
           host: ''
+          key_type: ''
           passphrase: ''
           password: ''
           port: ''
@@ -523,6 +582,7 @@ workflow:
         title: SSH Command Execution
         tool_configurations:
           auth_type: password
+          key_type: auto
         tool_label: SSH Command Execution
         tool_name: ssh
         tool_parameters:
