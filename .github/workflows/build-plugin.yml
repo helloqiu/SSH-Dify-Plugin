@@ -1,0 +1,109 @@
+name: Build Dify Plugin Package
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Dify 插件 CLI（langgenius/dify-plugin-daemon 的 release tag，注意不带 v 前缀）。
+  DIFY_PLUGIN_CLI_VERSION: "0.6.10"
+
+jobs:
+  package:
+    name: Package .difypkg
+    runs-on: ubuntu-latest
+    outputs:
+      package_file: ${{ steps.meta.outputs.package_file }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve plugin name and version
+        id: meta
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version:[[:space:]]*//p' manifest.yaml | head -n1 | xargs)"
+          name="$(sed -n 's/^name:[[:space:]]*//p' manifest.yaml | head -n1 | xargs)"
+          if [ -z "$version" ] || [ -z "$name" ]; then
+            echo "::error::cannot read name/version from manifest.yaml"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match manifest.yaml version ${version}"
+            exit 1
+          fi
+          echo "package_file=${name}-${version}.difypkg" >> "$GITHUB_OUTPUT"
+          echo "packaging ${name} ${version}"
+
+      - name: Download Dify plugin CLI
+        run: |
+          set -euo pipefail
+          url="https://github.com/langgenius/dify-plugin-daemon/releases/download/${DIFY_PLUGIN_CLI_VERSION}/dify-plugin-linux-amd64"
+          curl -fsSL -o "$RUNNER_TEMP/dify" "$url"
+          chmod +x "$RUNNER_TEMP/dify"
+          "$RUNNER_TEMP/dify" version
+
+      - name: Package plugin
+        env:
+          PACKAGE_FILE: ${{ steps.meta.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          "$RUNNER_TEMP/dify" plugin package . -o "dist/${PACKAGE_FILE}"
+          ls -lh dist
+
+      - name: Verify package contents
+        env:
+          PACKAGE_FILE: ${{ steps.meta.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          pkg="dist/${PACKAGE_FILE}"
+          test -s "$pkg"
+          listing="$(unzip -Z1 "$pkg")"
+          for required in manifest.yaml main.py provider/ssh.yaml tools/ssh.yaml; do
+            echo "$listing" | grep -qx "$required" || {
+              echo "::error::$required is missing from ${PACKAGE_FILE}"
+              exit 1
+            }
+          done
+          if echo "$listing" | grep -qE '^(\.git/|\.github/|dist/)'; then
+            echo "::error::dev files leaked into ${PACKAGE_FILE}; check .difyignore"
+            exit 1
+          fi
+          echo "$listing"
+
+      - name: Upload .difypkg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dify-plugin-package
+          path: dist/*.difypkg
+          if-no-files-found: error
+
+  release:
+    name: Attach package to GitHub Release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download .difypkg artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dify-plugin-package
+          path: dist
+
+      - name: Create release and upload .difypkg
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_FILE: ${{ needs.package.outputs.package_file }}
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" "dist/${PACKAGE_FILE}" --clobber

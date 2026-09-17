@@ -171,6 +171,9 @@ cython_debug/
 .git/
 .gitignore
 
+# GitHub Actions
+.github/
+
 # Mac
 .DS_Store
 
